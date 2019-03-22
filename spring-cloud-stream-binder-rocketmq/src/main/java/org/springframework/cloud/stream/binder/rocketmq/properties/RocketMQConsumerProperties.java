@@ -50,6 +50,16 @@ public class RocketMQConsumerProperties {
 	 */
 	private Boolean orderly = false;
 
+	/**
+	 * for concurrently listener. message consume retry strategy
+	 */
+	private int delayLevelWhenNextConsume = 0;
+
+	/**
+	 * for orderly listener. next retry delay time
+	 */
+	private long suspendCurrentQueueTimeMillis = 1000;
+
 	private Boolean enabled = true;
 
 	public String getTags() {
@@ -90,5 +100,21 @@ public class RocketMQConsumerProperties {
 
 	public void setBroadcasting(Boolean broadcasting) {
 		this.broadcasting = broadcasting;
+	}
+
+	public int getDelayLevelWhenNextConsume() {
+		return delayLevelWhenNextConsume;
+	}
+
+	public void setDelayLevelWhenNextConsume(int delayLevelWhenNextConsume) {
+		this.delayLevelWhenNextConsume = delayLevelWhenNextConsume;
+	}
+
+	public long getSuspendCurrentQueueTimeMillis() {
+		return suspendCurrentQueueTimeMillis;
+	}
+
+	public void setSuspendCurrentQueueTimeMillis(long suspendCurrentQueueTimeMillis) {
+		this.suspendCurrentQueueTimeMillis = suspendCurrentQueueTimeMillis;
 	}
 }

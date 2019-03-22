@@ -17,7 +17,6 @@
 package org.springframework.cloud.alibaba.nacos.registry;
 
 import org.springframework.cloud.alibaba.nacos.NacosDiscoveryProperties;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.client.DefaultServiceInstance;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.discovery.ManagementServerPortUtils;
@@ -38,23 +37,34 @@ import com.alibaba.nacos.api.naming.NamingService;
  */
 public class NacosRegistration implements Registration, ServiceInstance {
 
-	private static final String MANAGEMENT_PORT = "management.port";
-	private static final String MANAGEMENT_CONTEXT_PATH = "management.context-path";
-	private static final String MANAGEMENT_ADDRESS = "management.address";
+	public static final String MANAGEMENT_PORT = "management.port";
+	public static final String MANAGEMENT_CONTEXT_PATH = "management.context-path";
+	public static final String MANAGEMENT_ADDRESS = "management.address";
+	public static final String MANAGEMENT_ENDPOINT_BASE_PATH = "management.endpoints.web.base-path";
 
-	@Autowired
 	private NacosDiscoveryProperties nacosDiscoveryProperties;
 
-	@Autowired
 	private ApplicationContext context;
+
+	public NacosRegistration(NacosDiscoveryProperties nacosDiscoveryProperties,
+			ApplicationContext context) {
+		this.nacosDiscoveryProperties = nacosDiscoveryProperties;
+		this.context = context;
+	}
 
 	@PostConstruct
 	public void init() {
 
+		Map<String, String> metadata = nacosDiscoveryProperties.getMetadata();
 		Environment env = context.getEnvironment();
+
+		String endpointBasePath = env.getProperty(MANAGEMENT_ENDPOINT_BASE_PATH);
+		if (!StringUtils.isEmpty(endpointBasePath)) {
+			metadata.put(MANAGEMENT_ENDPOINT_BASE_PATH, endpointBasePath);
+		}
+
 		Integer managementPort = ManagementServerPortUtils.getPort(context);
 		if (null != managementPort) {
-			Map<String, String> metadata = nacosDiscoveryProperties.getMetadata();
 			metadata.put(MANAGEMENT_PORT, managementPort.toString());
 			String contextPath = env
 					.getProperty("management.server.servlet.context-path");
@@ -120,11 +130,6 @@ public class NacosRegistration implements Registration, ServiceInstance {
 
 	public NamingService getNacosNamingService() {
 		return nacosDiscoveryProperties.namingServiceInstance();
-	}
-
-	public void setNacosDiscoveryProperties(
-			NacosDiscoveryProperties nacosDiscoveryProperties) {
-		this.nacosDiscoveryProperties = nacosDiscoveryProperties;
 	}
 
 	@Override

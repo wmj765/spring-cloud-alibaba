@@ -17,9 +17,9 @@
 package org.springframework.cloud.alibaba.nacos.client;
 
 import com.alibaba.nacos.api.config.ConfigService;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.alibaba.nacos.NacosConfigProperties;
 import org.springframework.cloud.alibaba.nacos.NacosPropertySourceRepository;
 import org.springframework.cloud.alibaba.nacos.refresh.NacosContextRefresher;
@@ -40,22 +40,22 @@ import java.util.List;
 @Order(0)
 public class NacosPropertySourceLocator implements PropertySourceLocator {
 
-	private static final Logger LOGGER = LoggerFactory
+	private static final Logger log = LoggerFactory
 			.getLogger(NacosPropertySourceLocator.class);
 	private static final String NACOS_PROPERTY_SOURCE_NAME = "NACOS";
 	private static final String SEP1 = "-";
 	private static final String DOT = ".";
-	private static final String SHARED_CONFIG_SEPRATOR_CHAR = "[,]";
+	private static final String SHARED_CONFIG_SEPARATOR_CHAR = "[,]";
 	private static final List<String> SUPPORT_FILE_EXTENSION = Arrays.asList("properties",
 			"yaml", "yml");
 
-	@Autowired
+	private NacosPropertySourceBuilder nacosPropertySourceBuilder;
+
 	private NacosConfigProperties nacosConfigProperties;
 
-	public NacosPropertySourceLocator() {
+	public NacosPropertySourceLocator(NacosConfigProperties nacosConfigProperties) {
+		this.nacosConfigProperties = nacosConfigProperties;
 	}
-
-	private NacosPropertySourceBuilder nacosPropertySourceBuilder;
 
 	@Override
 	public PropertySource<?> locate(Environment env) {
@@ -63,8 +63,7 @@ public class NacosPropertySourceLocator implements PropertySourceLocator {
 		ConfigService configService = nacosConfigProperties.configServiceInstance();
 
 		if (null == configService) {
-			LOGGER.warn(
-					"no instance of config service found, can't load config from nacos");
+			log.warn("no instance of config service found, can't load config from nacos");
 			return null;
 		}
 		long timeout = nacosConfigProperties.getTimeout();
@@ -72,7 +71,6 @@ public class NacosPropertySourceLocator implements PropertySourceLocator {
 				timeout);
 		String name = nacosConfigProperties.getName();
 
-		String nacosGroup = nacosConfigProperties.getGroup();
 		String dataIdPrefix = nacosConfigProperties.getPrefix();
 		if (StringUtils.isEmpty(dataIdPrefix)) {
 			dataIdPrefix = name;
@@ -82,17 +80,12 @@ public class NacosPropertySourceLocator implements PropertySourceLocator {
 			dataIdPrefix = env.getProperty("spring.application.name");
 		}
 
-		List<String> profiles = Arrays.asList(env.getActiveProfiles());
-		nacosConfigProperties.setActiveProfiles(profiles.toArray(new String[0]));
-
-		String fileExtension = nacosConfigProperties.getFileExtension();
-
 		CompositePropertySource composite = new CompositePropertySource(
 				NACOS_PROPERTY_SOURCE_NAME);
 
 		loadSharedConfiguration(composite);
 		loadExtConfiguration(composite);
-		loadApplicationConfiguration(composite, nacosGroup, dataIdPrefix, fileExtension);
+		loadApplicationConfiguration(composite, dataIdPrefix, nacosConfigProperties, env);
 
 		return composite;
 	}
@@ -106,7 +99,7 @@ public class NacosPropertySourceLocator implements PropertySourceLocator {
 			return;
 		}
 
-		String[] sharedDataIdArry = sharedDataIds.split(SHARED_CONFIG_SEPRATOR_CHAR);
+		String[] sharedDataIdArry = sharedDataIds.split(SHARED_CONFIG_SEPARATOR_CHAR);
 		checkDataIdFileExtension(sharedDataIdArry);
 
 		for (int i = 0; i < sharedDataIdArry.length; i++) {
@@ -153,11 +146,15 @@ public class NacosPropertySourceLocator implements PropertySourceLocator {
 	}
 
 	private void loadApplicationConfiguration(
-			CompositePropertySource compositePropertySource, String nacosGroup,
-			String dataIdPrefix, String fileExtension) {
+			CompositePropertySource compositePropertySource, String dataIdPrefix,
+			NacosConfigProperties properties, Environment environment) {
+
+		String fileExtension = properties.getFileExtension();
+		String nacosGroup = properties.getGroup();
+
 		loadNacosDataIfPresent(compositePropertySource,
 				dataIdPrefix + DOT + fileExtension, nacosGroup, fileExtension, true);
-		for (String profile : nacosConfigProperties.getActiveProfiles()) {
+		for (String profile : environment.getActiveProfiles()) {
 			String dataId = dataIdPrefix + SEP1 + profile + DOT + fileExtension;
 			loadNacosDataIfPresent(compositePropertySource, dataId, nacosGroup,
 					fileExtension, true);
@@ -167,7 +164,7 @@ public class NacosPropertySourceLocator implements PropertySourceLocator {
 	private void loadNacosDataIfPresent(final CompositePropertySource composite,
 			final String dataId, final String group, String fileExtension,
 			boolean isRefreshable) {
-		if (NacosContextRefresher.loadCount.get() != 0) {
+		if (NacosContextRefresher.getRefreshCount() != 0) {
 			NacosPropertySource ps;
 			if (!isRefreshable) {
 				ps = NacosPropertySourceRepository.getNacosPropertySource(dataId);
@@ -185,15 +182,20 @@ public class NacosPropertySourceLocator implements PropertySourceLocator {
 		}
 	}
 
-	private static void checkDataIdFileExtension(String[] sharedDataIdArry) {
+	private static void checkDataIdFileExtension(String[] dataIdArray) {
 		StringBuilder stringBuilder = new StringBuilder();
-		outline: for (int i = 0; i < sharedDataIdArry.length; i++) {
+		for (int i = 0; i < dataIdArray.length; i++) {
+			boolean isLegal = false;
 			for (String fileExtension : SUPPORT_FILE_EXTENSION) {
-				if (sharedDataIdArry[i].indexOf(fileExtension) > 0) {
-					continue outline;
+				if (dataIdArray[i].indexOf(fileExtension) > 0) {
+					isLegal = true;
+					break;
 				}
 			}
-			stringBuilder.append(sharedDataIdArry[i] + ",");
+			// add tips
+			if (!isLegal) {
+				stringBuilder.append(dataIdArray[i] + ",");
+			}
 		}
 
 		if (stringBuilder.length() > 0) {
@@ -210,7 +212,7 @@ public class NacosPropertySourceLocator implements PropertySourceLocator {
 			return false;
 		}
 
-		String[] refreshDataIdArry = refreshDataIds.split(SHARED_CONFIG_SEPRATOR_CHAR);
+		String[] refreshDataIdArry = refreshDataIds.split(SHARED_CONFIG_SEPARATOR_CHAR);
 		for (String refreshDataId : refreshDataIdArry) {
 			if (refreshDataId.equals(sharedDataId)) {
 				return true;
