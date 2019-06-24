@@ -40,7 +40,17 @@ public enum RuleType {
 	/**
 	 * authority
 	 */
-	AUTHORITY("authority", AuthorityRule.class);
+	AUTHORITY("authority", AuthorityRule.class),
+	/**
+	 * gateway flow
+	 */
+	GW_FLOW("gw-flow",
+			"com.alibaba.csp.sentinel.adapter.gateway.common.rule.GatewayFlowRule"),
+	/**
+	 * api
+	 */
+	GW_API_GROUP("gw-api-group",
+			"com.alibaba.csp.sentinel.adapter.gateway.common.api.ApiDefinition");
 
 	/**
 	 * alias for {@link AbstractRule}
@@ -50,11 +60,21 @@ public enum RuleType {
 	/**
 	 * concrete {@link AbstractRule} class
 	 */
-	private final Class clazz;
+	private Class clazz;
+
+	/**
+	 * concrete {@link AbstractRule} class name
+	 */
+	private String clazzName;
 
 	RuleType(String name, Class clazz) {
 		this.name = name;
 		this.clazz = clazz;
+	}
+
+	RuleType(String name, String clazzName) {
+		this.name = name;
+		this.clazzName = clazzName;
 	}
 
 	public String getName() {
@@ -62,7 +82,17 @@ public enum RuleType {
 	}
 
 	public Class getClazz() {
-		return clazz;
+		if (clazz != null) {
+			return clazz;
+		}
+		else {
+			try {
+				return Class.forName(clazzName);
+			}
+			catch (ClassNotFoundException e) {
+				throw new RuntimeException(e);
+			}
+		}
 	}
 
 	public static Optional<RuleType> getByName(String name) {

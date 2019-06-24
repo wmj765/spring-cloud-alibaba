@@ -16,8 +16,6 @@
 
 package org.springframework.cloud.alibaba.sentinel.custom;
 
-import java.util.Optional;
-
 import javax.annotation.PostConstruct;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,12 +31,9 @@ import org.springframework.cloud.alibaba.sentinel.datasource.converter.XmlConver
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.util.StringUtils;
 
-import com.alibaba.csp.sentinel.adapter.servlet.callback.RequestOriginParser;
-import com.alibaba.csp.sentinel.adapter.servlet.callback.UrlBlockHandler;
-import com.alibaba.csp.sentinel.adapter.servlet.callback.UrlCleaner;
-import com.alibaba.csp.sentinel.adapter.servlet.callback.WebCallbackManager;
 import com.alibaba.csp.sentinel.adapter.servlet.config.WebServletConfig;
 import com.alibaba.csp.sentinel.annotation.aspectj.SentinelResourceAspect;
 import com.alibaba.csp.sentinel.config.SentinelConfig;
@@ -52,6 +47,7 @@ import com.alibaba.csp.sentinel.slots.system.SystemRule;
 import com.alibaba.csp.sentinel.transport.config.TransportConfig;
 import com.alibaba.csp.sentinel.util.AppNameUtil;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 
@@ -70,15 +66,6 @@ public class SentinelAutoConfiguration {
 
 	@Autowired
 	private SentinelProperties properties;
-
-	@Autowired
-	private Optional<UrlCleaner> urlCleanerOptional;
-
-	@Autowired
-	private Optional<UrlBlockHandler> urlBlockHandlerOptional;
-
-	@Autowired
-	private Optional<RequestOriginParser> requestOriginParserOptional;
 
 	@PostConstruct
 	private void init() {
@@ -142,10 +129,6 @@ public class SentinelAutoConfiguration {
 			WebServletConfig.setBlockPage(properties.getServlet().getBlockPage());
 		}
 
-		urlBlockHandlerOptional.ifPresent(WebCallbackManager::setUrlBlockHandler);
-		urlCleanerOptional.ifPresent(WebCallbackManager::setUrlCleaner);
-		requestOriginParserOptional.ifPresent(WebCallbackManager::setRequestOriginParser);
-
 		// earlier initialize
 		if (properties.isEager()) {
 			InitExecutor.doInit();
@@ -169,72 +152,91 @@ public class SentinelAutoConfiguration {
 	}
 
 	@Bean
+	@ConditionalOnMissingBean
 	public SentinelDataSourceHandler sentinelDataSourceHandler(
-			DefaultListableBeanFactory beanFactory) {
-		return new SentinelDataSourceHandler(beanFactory);
+			DefaultListableBeanFactory beanFactory, SentinelProperties sentinelProperties,
+			Environment env) {
+		return new SentinelDataSourceHandler(beanFactory, sentinelProperties, env);
 	}
 
+	@ConditionalOnClass(ObjectMapper.class)
+	@Configuration
 	protected static class SentinelConverterConfiguration {
 
-		private ObjectMapper objectMapper = new ObjectMapper();
+		@Configuration
+		protected static class SentinelJsonConfiguration {
 
-		@Bean("sentinel-json-flow-converter")
-		public JsonConverter jsonFlowConverter() {
-			return new JsonConverter(objectMapper, FlowRule.class);
+			private ObjectMapper objectMapper = new ObjectMapper();
+
+			public SentinelJsonConfiguration() {
+				objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,
+						false);
+			}
+
+			@Bean("sentinel-json-flow-converter")
+			public JsonConverter jsonFlowConverter() {
+				return new JsonConverter(objectMapper, FlowRule.class);
+			}
+
+			@Bean("sentinel-json-degrade-converter")
+			public JsonConverter jsonDegradeConverter() {
+				return new JsonConverter(objectMapper, DegradeRule.class);
+			}
+
+			@Bean("sentinel-json-system-converter")
+			public JsonConverter jsonSystemConverter() {
+				return new JsonConverter(objectMapper, SystemRule.class);
+			}
+
+			@Bean("sentinel-json-authority-converter")
+			public JsonConverter jsonAuthorityConverter() {
+				return new JsonConverter(objectMapper, AuthorityRule.class);
+			}
+
+			@Bean("sentinel-json-param-flow-converter")
+			public JsonConverter jsonParamFlowConverter() {
+				return new JsonConverter(objectMapper, ParamFlowRule.class);
+			}
+
 		}
 
-		@Bean("sentinel-json-degrade-converter")
-		public JsonConverter jsonDegradeConverter() {
-			return new JsonConverter(objectMapper, DegradeRule.class);
+		@ConditionalOnClass(XmlMapper.class)
+		@Configuration
+		protected static class SentinelXmlConfiguration {
+
+			private XmlMapper xmlMapper = new XmlMapper();
+
+			public SentinelXmlConfiguration() {
+				xmlMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,
+						false);
+			}
+
+			@Bean("sentinel-xml-flow-converter")
+			public XmlConverter xmlFlowConverter() {
+				return new XmlConverter(xmlMapper, FlowRule.class);
+			}
+
+			@Bean("sentinel-xml-degrade-converter")
+			public XmlConverter xmlDegradeConverter() {
+				return new XmlConverter(xmlMapper, DegradeRule.class);
+			}
+
+			@Bean("sentinel-xml-system-converter")
+			public XmlConverter xmlSystemConverter() {
+				return new XmlConverter(xmlMapper, SystemRule.class);
+			}
+
+			@Bean("sentinel-xml-authority-converter")
+			public XmlConverter xmlAuthorityConverter() {
+				return new XmlConverter(xmlMapper, AuthorityRule.class);
+			}
+
+			@Bean("sentinel-xml-param-flow-converter")
+			public XmlConverter xmlParamFlowConverter() {
+				return new XmlConverter(xmlMapper, ParamFlowRule.class);
+			}
+
 		}
-
-		@Bean("sentinel-json-system-converter")
-		public JsonConverter jsonSystemConverter() {
-			return new JsonConverter(objectMapper, SystemRule.class);
-		}
-
-		@Bean("sentinel-json-authority-converter")
-		public JsonConverter jsonAuthorityConverter() {
-			return new JsonConverter(objectMapper, AuthorityRule.class);
-		}
-
-		@Bean("sentinel-json-param-flow-converter")
-		public JsonConverter jsonParamFlowConverter() {
-			return new JsonConverter(objectMapper, ParamFlowRule.class);
-		}
-
-	}
-
-	@ConditionalOnClass(XmlMapper.class)
-	protected static class SentinelXmlConfiguration {
-
-		private XmlMapper xmlMapper = new XmlMapper();
-
-		@Bean("sentinel-xml-flow-converter")
-		public XmlConverter xmlFlowConverter() {
-			return new XmlConverter(xmlMapper, FlowRule.class);
-		}
-
-		@Bean("sentinel-xml-degrade-converter")
-		public XmlConverter xmlDegradeConverter() {
-			return new XmlConverter(xmlMapper, DegradeRule.class);
-		}
-
-		@Bean("sentinel-xml-system-converter")
-		public XmlConverter xmlSystemConverter() {
-			return new XmlConverter(xmlMapper, SystemRule.class);
-		}
-
-		@Bean("sentinel-xml-authority-converter")
-		public XmlConverter xmlAuthorityConverter() {
-			return new XmlConverter(xmlMapper, AuthorityRule.class);
-		}
-
-		@Bean("sentinel-xml-param-flow-converter")
-		public XmlConverter xmlParamFlowConverter() {
-			return new XmlConverter(xmlMapper, ParamFlowRule.class);
-		}
-
 	}
 
 }
